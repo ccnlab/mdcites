@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/goki/ki/dirs"
 	"github.com/goki/pi/langs/bibtex"
@@ -34,11 +35,7 @@ func main() {
 		return
 	}
 
-	exp, err := regexp.Compile(`\[@[[:alnum:]]*\]`)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	exp := regexp.MustCompile(`\[(@([[:alnum:]]+-?)+(;[[:blank:]]+)?)+\]`)
 
 	mds := dirs.ExtFileNames(srcDir, []string{".md"})
 	if len(mds) == 0 {
@@ -73,13 +70,19 @@ func main() {
 		scan := bufio.NewScanner(f)
 		for scan.Scan() {
 			cs := exp.FindAllString(string(scan.Bytes()), -1)
-			if len(cs) == 0 {
-				continue
-			}
 			for _, c := range cs {
-				cc, _ := refs[c]
-				cc++
-				refs[c] = cc
+				tc := c[1 : len(c)-1]
+				sp := strings.Split(tc, "@")
+				for _, ac := range sp {
+					a := strings.TrimSpace(ac)
+					a = strings.TrimSuffix(a, ";")
+					if a == "" {
+						continue
+					}
+					cc, _ := refs[a]
+					cc++
+					refs[a] = cc
+				}
 			}
 		}
 		f.Close()
@@ -91,12 +94,11 @@ func main() {
 	ob.StringVar = parsed.StringVar
 
 	for r, _ := range refs {
-		tr := r[2 : len(r)-1]
-		be, has := parsed.Lookup(tr)
+		be, has := parsed.Lookup(r)
 		if has {
 			ob.Entries = append(ob.Entries, be)
 		} else {
-			fmt.Printf("Error: Reference key: %v not found in %s\n", srcBib)
+			fmt.Printf("Error: Reference key: %v not found in %s\n", r, srcBib)
 		}
 	}
 	out := ob.PrettyString()
